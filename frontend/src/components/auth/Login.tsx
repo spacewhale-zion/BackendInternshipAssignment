@@ -2,16 +2,14 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { AxiosError } from 'axios';
 import api from '../../utils/api';
-import { useAuth } from '../../context/AuthContext'; // 1. Import useAuth
+import { useAuth } from '../../context/AuthContext'; 
 
-// Loading spinner component (can be in its own file)
 const FormSpinner = () => (
   <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
 );
 
-// Icon for the login page
 const LockIcon = () => (
-  <svg className="h-6 w-6 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+  <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
   </svg>
 );
@@ -20,9 +18,9 @@ const LockIcon = () => (
 const Login = () => {
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [error, setError] = useState<string>('');
-  const [loading, setLoading] = useState<boolean>(false); // 2. Add loading state
+  const [loading, setLoading] = useState<boolean>(false);
   const navigate = useNavigate();
-  const { login } = useAuth(); // 3. Get the login function from context
+  const { login } = useAuth(); 
 
   const { email, password } = formData;
 
@@ -32,29 +30,36 @@ const Login = () => {
   const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
-    setLoading(true); // 4. Set loading true
+    setLoading(true);
     try {
       const res = await api.post<{ token: string }>('/auth/login', {
         email,
         password,
       });
-      
-      // 5. Call context login function
-      await login(res.data.token); 
-      
-      // 6. Redirect (context will handle auth state)
+
+      await login(res.data.token);
       navigate('/dashboard');
 
     } catch (err) {
-      const axiosError = err as AxiosError<{ errors: { msg: string }[] }>;
-      const errors = axiosError.response?.data?.errors;
-      if (errors) {
-        setError(errors.map((e) => e.msg).join(', '));
-      } else {
-        setError('Login failed. Invalid credentials.');
+      const axiosError = err as AxiosError<{ errors?: { msg: string }[], msg?: string }>;
+      const backendErrors = axiosError.response?.data?.errors;
+      const backendMsg = (axiosError.response?.data as any)?.msg; 
+
+      if (backendErrors && backendErrors.length > 0) {
+        const verificationError = backendErrors.find(e => e.msg.includes('verify your email'));
+        if (verificationError) {
+          setError(verificationError.msg); 
+        } else {
+          setError(backendErrors.map((e) => e.msg).join(', '));
+        }
+      } else if (backendMsg) {
+          setError(backendMsg);
+      }
+      else {
+        setError('Login failed. Please check your credentials.'); 
       }
     } finally {
-      setLoading(false); // 7. Set loading false
+      setLoading(false);
     }
   };
 
@@ -77,20 +82,12 @@ const Login = () => {
           <form className="space-y-6" onSubmit={onSubmit}>
             {/* Error Alert */}
             {error && (
-              <div className="bg-red-50 border border-red-200 rounded-md p-3">
-                <div className="flex items-center">
-                  <div className="shrink-0">
-                    <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                    </svg>
-                  </div>
-                  <div className="ml-3">
-                    <p className="text-sm text-red-700">{error}</p>
-                  </div>
-                </div>
+               <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+                <span className="block sm:inline">{error}</span>
               </div>
             )}
 
+            {/* --- Input Fields remain the same --- */}
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700">
                 Email address
@@ -108,8 +105,7 @@ const Login = () => {
                 />
               </div>
             </div>
-
-            <div>
+             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700">
                 Password
               </label>
@@ -126,6 +122,8 @@ const Login = () => {
                 />
               </div>
             </div>
+            {/* --- End Input Fields --- */}
+
 
             <div>
               <button
@@ -134,7 +132,7 @@ const Login = () => {
                 className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-150 ease-in-out"
               >
                 {loading ? <FormSpinner /> : (
-                  <div className="flex items-center">
+                  <div className="flex items-center justify-center"> {/* Centered Icon/Text */}
                     <LockIcon />
                     <span className="ml-2">Sign in</span>
                   </div>

@@ -9,7 +9,7 @@ exports.createTask = async (req, res) => {
       title,
       description,
       status,
-      user: req.user.id, // From auth middleware
+      user: req.user.id, 
     });
 
     const task = await newTask.save();
@@ -23,7 +23,6 @@ exports.createTask = async (req, res) => {
 // Get User's Tasks
 exports.getUserTasks = async (req, res) => {
   try {
-    // Find tasks belonging to the logged-in user
     const tasks = await Task.find({ user: req.user.id }).sort({ createdAt: -1 });
     res.json(tasks);
   } catch (err) {
@@ -32,10 +31,8 @@ exports.getUserTasks = async (req, res) => {
   }
 };
 
-// Get All Tasks (Admin Only)
 exports.getAllTasks = async (req, res) => {
   try {
-    // Admin can see all tasks from all users
     const tasks = await Task.find().populate('user', ['name', 'email']).sort({ createdAt: -1 });
     res.json(tasks);
   } catch (err) {
@@ -44,7 +41,6 @@ exports.getAllTasks = async (req, res) => {
   }
 };
 
-// Get Single Task by ID
 exports.getTaskById = async (req, res) => {
   try {
     const task = await Task.findById(req.params.id);
@@ -53,7 +49,6 @@ exports.getTaskById = async (req, res) => {
       return res.status(404).json({ msg: 'Task not found' });
     }
 
-    // Check if the user owns the task (or is admin)
     if (task.user.toString() !== req.user.id && req.user.role !== 'admin') {
       return res.status(401).json({ msg: 'User not authorized' });
     }
@@ -77,7 +72,6 @@ exports.updateTask = async (req, res) => {
             return res.status(404).json({ msg: 'Task not found' });
         }
 
-        // Check user ownership
         if (task.user.toString() !== req.user.id) {
             return res.status(401).json({ msg: 'User not authorized' });
         }
@@ -88,7 +82,7 @@ exports.updateTask = async (req, res) => {
         task = await Task.findByIdAndUpdate(
             req.params.id,
             { $set: updatedFields },
-            { new: true } // Return the modified document
+            { new: true } 
         );
 
         res.json(task);
@@ -107,7 +101,6 @@ exports.deleteTask = async (req, res) => {
             return res.status(404).json({ msg: 'Task not found' });
         }
 
-        // Check user ownership
         if (task.user.toString() !== req.user.id && req.user.role !== 'admin') {
             return res.status(401).json({ msg: 'User not authorized' });
         }

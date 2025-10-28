@@ -1,15 +1,12 @@
 import React, { useState } from 'react';
 import api from '../../utils/api';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom'; 
 import { AxiosError } from 'axios';
-import { useAuth } from '../../context/AuthContext'; // 1. Import useAuth
 
-// Loading spinner component
 const FormSpinner = () => (
   <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
 );
 
-// Icon for the register page
 const UserAddIcon = () => (
   <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
@@ -21,14 +18,14 @@ const Register = () => {
     name: '',
     email: '',
     password: '',
-    password2: '', // For password confirmation
+    password2: '',
+    adminKey: '',
   });
   const [error, setError] = useState<string>('');
-  const [loading, setLoading] = useState<boolean>(false); // 2. Add loading state
-  const navigate = useNavigate();
-  const { login } = useAuth(); // 3. Get the login function from context
+  const [successMessage, setSuccessMessage] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(false);
 
-  const { name, email, password, password2 } = formData;
+  const { name, email, password, password2, adminKey } = formData;
 
   const onChange = (e: React.ChangeEvent<HTMLInputElement>) =>
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -36,37 +33,38 @@ const Register = () => {
   const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
+    setSuccessMessage(''); 
 
-    // Client-side password match check
     if (password !== password2) {
       setError('Passwords do not match');
       return;
     }
 
-    setLoading(true); // 4. Set loading true
+    setLoading(true);
     try {
-      // Only send name, email, and password
-      const res = await api.post<{ token: string }>('/auth/register', {
-        name,
-        email,
-        password,
-      });
+      const registrationData: any = { name, email, password };
+      if (adminKey.trim()) {
+        registrationData.adminKey = adminKey.trim();
+      }
 
-      // 5. On success, call login from context
-      await login(res.data.token);
-      
-      // 6. Redirect to dashboard
-      navigate('/dashboard');
+      const res = await api.post<{ msg: string }>('/auth/register', registrationData);
+
+      setSuccessMessage(res.data.msg || 'Registration successful! Please check your email to verify your account.');
+      setFormData({ name: '', email: '', password: '', password2: '', adminKey: '' });
+
     } catch (err) {
-      const axiosError = err as AxiosError<{ errors: { msg: string }[] }>;
-      const errors = axiosError.response?.data?.errors;
-      if (errors) {
-        setError(errors.map((e) => e.msg).join(', '));
+      const axiosError = err as AxiosError<{ errors?: { msg: string }[], msg?: string }>; 
+      const backendErrors = axiosError.response?.data?.errors;
+      const backendMsg = (axiosError.response?.data as any)?.msg; 
+      if (backendErrors && backendErrors.length > 0) {
+        setError(backendErrors.map((e) => e.msg).join(', '));
+      } else if (backendMsg) {
+         setError(backendMsg); 
       } else {
         setError('Registration failed. Please try again.');
       }
     } finally {
-      setLoading(false); // 7. Set loading false
+      setLoading(false);
     }
   };
 
@@ -89,20 +87,16 @@ const Register = () => {
           <form className="space-y-6" onSubmit={onSubmit}>
             {/* Error Alert */}
             {error && (
-              <div className="bg-red-50 border border-red-200 rounded-md p-3">
-                <div className="flex items-center">
-                  <div className="shrink-0">
-                    <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                    </svg>
-                  </div>
-                  <div className="ml-3">
-                    <p className="text-sm text-red-700">{error}</p>
-                  </div>
-                </div>
+              <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+                <span className="block sm:inline">{error}</span>
               </div>
             )}
-            
+            {successMessage && (
+               <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative" role="alert">
+                 <span className="block sm:inline">{successMessage}</span>
+               </div>
+            )}
+
             <div>
               <label htmlFor="name" className="block text-sm font-medium text-gray-700">
                 Full Name
@@ -120,8 +114,7 @@ const Register = () => {
                 />
               </div>
             </div>
-
-            <div>
+             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700">
                 Email address
               </label>
@@ -138,8 +131,7 @@ const Register = () => {
                 />
               </div>
             </div>
-
-            <div>
+             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700">
                 Password
               </label>
@@ -157,7 +149,6 @@ const Register = () => {
                 />
               </div>
             </div>
-            
              <div>
               <label htmlFor="password2" className="block text-sm font-medium text-gray-700">
                 Confirm Password
@@ -176,6 +167,22 @@ const Register = () => {
                 />
               </div>
             </div>
+            <div>
+              <label htmlFor="adminKey" className="block text-sm font-medium text-gray-700">
+                Admin Key (Optional)
+              </label>
+              <div className="mt-1">
+                <input
+                  id="adminKey"
+                  name="adminKey"
+                  type="password" 
+                  value={adminKey}
+                  onChange={onChange}
+                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                />
+              </div>
+            </div>
+
 
             <div>
               <button

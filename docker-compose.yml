@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  # ------------------
+  # Backend Service
+  # ------------------
+  backend:
+    build:
+      context: ./backend
+    container_name: backend_app
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./backend:/app         
+      - /app/node_modules      
+    env_file:
+      - ./backend/.env         
+    environment:
+      NODE_ENV: development    
+    depends_on:
+      - mongo
+    networks:
+      - app-network
+
+  # ------------------
+  # Frontend Service
+  # ------------------
+  frontend:
+    build:
+      context: ./frontend
+    container_name: frontend_app
+    ports:
+      - "5173:5173"            
+    volumes:
+      - ./frontend:/app         
+      - /app/node_modules
+    environment:
+      VITE_API_BaseURL: http://localhost:5000/api/v1
+    depends_on:
+      - backend
+    networks:
+      - app-network
+
+  # ------------------
+  # MongoDB Service
+  # ------------------
+  mongo:
+    image: mongo:latest
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - app-network
+
+# ------------------
+# Networks
+# ------------------
+networks:
+  app-network:
+    driver: bridge
+
+# ------------------
+# Volumes
+# ------------------
+volumes:
+  mongo-data:

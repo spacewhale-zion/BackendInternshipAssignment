@@ -1,52 +1,123 @@
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
+const sendEmail = require('../utils/sendEmail'); 
+const crypto = require('crypto');
 
-// Register User
 exports.registerUser = async (req, res) => {
-  const { name, email, password, role } = req.body;
+  const { name, email, password, adminKey } = req.body;
+
+  let userRole = 'user';
+  if (adminKey && adminKey === process.env.ADMIN_SECRET_KEY) {
+    userRole = 'admin';
+  } else if (adminKey) {
+    return res.status(400).json({ errors: [{ msg: 'Invalid Admin Key' }] });
+  }
 
   try {
     let user = await User.findOne({ email });
     if (user) {
+      if (!user.isVerified) {
+         const verificationToken = user.getVerificationToken();
+         await user.save({ validateBeforeSave: false }); 
+
+         const verifyUrl = `${req.protocol}://${req.get('host')}/api/v1/auth/verify/${verificationToken}`;
+         const message = `Please verify your account by clicking the following link: \n\n ${verifyUrl} \n\n If you did not request this email, please ignore it. This link will expire in 10 minutes.`;
+
+         try {
+           await sendEmail({
+             email: user.email,
+             subject: 'Account Verification',
+             message,
+           });
+           return res.status(200).json({ msg: 'Verification email sent. Please check your inbox (and spam folder).' });
+         } catch (emailErr) {
+            console.error('Email sending error:', emailErr);
+            user.verificationToken = undefined;
+            user.verificationTokenExpires = undefined;
+            await user.save({ validateBeforeSave: false });
+            return res.status(500).send('Error sending verification email.');
+         }
+      }
       return res.status(400).json({ errors: [{ msg: 'User already exists' }] });
     }
 
+    // --- Create New User ---
     user = new User({
       name,
       email,
       password,
-      role, // 'admin' or 'user'
+      role: userRole,
+      isVerified: false, 
     });
 
-    // Password hashing is handled by the pre-save hook in the model
+    const verificationToken = user.getVerificationToken();
 
     await user.save();
 
-    // Create payload for JWT
-    const payload = {
-      user: {
-        id: user.id,
-        role: user.role,
-      },
-    };
 
-    // Sign JWT
-    jwt.sign(
-      payload,
-      process.env.JWT_SECRET,
-      { expiresIn: '5h' }, // Token expires in 5 hours
-      (err, token) => {
-        if (err) throw err;
-        res.status(201).json({ token }); // Send token to client
-      }
-    );
+    const verifyUrl = `${req.protocol}://${req.get('host')}/api/v1/auth/verify/${verificationToken}`;
+
+    const message = `Thank you for registering! Please verify your account by clicking the following link: \n\n ${verifyUrl} \n\n If you did not request this email, please ignore it. This link will expire in 10 minutes.`;
+
+    try {
+      await sendEmail({
+        email: user.email,
+        subject: 'Account Verification',
+        message,
+      });
+
+      res.status(201).json({ msg: 'Registration successful! Please check your email to verify your account.' });
+
+    } catch (emailErr) {
+        console.error('Email sending error:', emailErr);
+       
+        await user.save({ validateBeforeSave: false });
+
+        return res.status(500).send('User registered, but failed to send verification email.');
+    }
+
   } catch (err) {
     console.error(err.message);
-    res.status(500).send('Server error');
+    res.status(500).send('Server error during registration.');
   }
 };
 
-// Login User
+// --- Add Verification Handler ---
+exports.verifyEmail = async (req, res) => {
+    try {
+
+        
+        const verificationToken = crypto
+            .createHash('sha256')
+            .update(req.params.token)
+            .digest('hex');
+
+        const user = await User.findOne({
+            verificationToken,
+            verificationTokenExpires: { $gt: Date.now() }
+        });
+
+        if (!user) {
+            return res.status(400).json({ msg: 'Invalid or expired verification token.' });
+        }
+
+        // 4. Verification successful
+        user.isVerified = true;
+        user.verificationToken = undefined;
+        user.verificationTokenExpires = undefined;
+        await user.save();
+
+         res.status(200).json({ msg: 'Email verified successfully! You can now log in.' });
+
+
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server error during email verification.');
+    }
+};
+
+
+// Login User - Add verification check
 exports.loginUser = async (req, res) => {
   const { email, password } = req.body;
 
@@ -56,12 +127,17 @@ exports.loginUser = async (req, res) => {
       return res.status(400).json({ errors: [{ msg: 'Invalid credentials' }] });
     }
 
+    // --- Check if email is verified ---
+    if (!user.isVerified) {
+       return res.status(401).json({ errors: [{ msg: 'Please verify your email address before logging in.' }] });
+    }
+    // --- End verification check ---
+
     const isMatch = await user.matchPassword(password);
     if (!isMatch) {
       return res.status(400).json({ errors: [{ msg: 'Invalid credentials' }] });
     }
 
-    // Create payload
     const payload = {
       user: {
         id: user.id,
@@ -69,7 +145,6 @@ exports.loginUser = async (req, res) => {
       },
     };
 
-    // Sign JWT
     jwt.sign(
       payload,
       process.env.JWT_SECRET,
@@ -85,10 +160,8 @@ exports.loginUser = async (req, res) => {
   }
 };
 
-// Get Current User
 exports.getMe = async (req, res) => {
   try {
-    // req.user is attached by the auth middleware
     res.json(req.user);
   } catch (err) {
     console.error(err.message);

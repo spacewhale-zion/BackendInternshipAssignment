@@ -2,7 +2,6 @@
 const mongoose = require('mongoose');
 
 const TaskSchema = new mongoose.Schema({
-  // Associate the task with a user
   user: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',

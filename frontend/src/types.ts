@@ -8,9 +8,9 @@ export interface User {
 
 export interface Task {
   _id: string;
-  user: string; // User ID
+  user: string;
   title: string;
   description?: string;
   status: 'pending' | 'completed';
-  createdAt: string; // ISO date string
+  createdAt: string; 
 }
